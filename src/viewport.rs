@@ -2,7 +2,7 @@ use lsp_types::*;
 
 /// Visible lines of editor.
 ///
-/// Inclusive at start, exclusive at end. Both start aned end are 0-based.
+/// Inclusive at start, exclusive at end. Both start and end are 0-based.
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Copy, Clone)]
 pub struct Viewport {
     pub start: u64,
@@ -15,10 +15,12 @@ impl Viewport {
         Self { start, end }
     }
 
+    // Check if 0-based line number is contained by this viewport.
     fn contains(&self, line: u64) -> bool {
         line >= self.start && line < self.end
     }
 
+    // Overlaps checks if a range with 0-based line numbers is contained by this viewport.
     pub fn overlaps(&self, range: Range) -> bool {
         self.contains(range.start.line) || self.contains(range.end.line)
     }

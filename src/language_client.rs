@@ -5,6 +5,7 @@ use std::ops::DerefMut;
 pub struct LanguageClient {
     pub state_mutex: Arc<Mutex<State>>,
     pub clients_mutex: Arc<Mutex<HashMap<LanguageId, Arc<Mutex<()>>>>>,
+    pub diagnostics_mutex: Arc<Mutex<()>>,
 }
 
 impl LanguageClient {
@@ -35,6 +36,12 @@ impl LanguageClient {
         }
         let mutex: Arc<Mutex<()>> = map.get(&languageId).unwrap().clone();
         Ok(mutex)
+    }
+
+    pub fn lock_diagnostics_update(&self) -> Fallible<MutexGuard<()>> {
+        self.diagnostics_mutex
+            .lock()
+            .map_err(|err| format_err!("Failed to lock state: {:?}", err))
     }
 
     pub fn get<T>(&self, f: impl FnOnce(&State) -> T) -> Fallible<T> {

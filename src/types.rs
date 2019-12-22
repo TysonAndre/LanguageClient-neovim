@@ -5,6 +5,7 @@ use crate::viewport::Viewport;
 use crate::vim::Vim;
 use std::collections::BTreeMap;
 use std::sync::mpsc;
+use std::time::Instant;
 
 pub type Fallible<T> = failure::Fallible<T>;
 
@@ -116,6 +117,8 @@ pub struct State {
     pub diagnostics: HashMap<String, Vec<Diagnostic>>,
     #[serde(skip_serializing)]
     pub line_diagnostics: HashMap<(String, u64), String>,
+    #[serde(skip_serializing)]
+    pub file_diagnostics_updated: HashMap<String, Instant>,
     pub sign_next_id: u64,
     /// Active signs.
     pub signs: HashMap<String, BTreeMap<u64, Sign>>,
@@ -198,6 +201,7 @@ impl State {
             diagnostics: HashMap::new(),
             line_diagnostics: HashMap::new(),
             sign_next_id: 75_000,
+            file_diagnostics_updated: HashMap::new(),
             signs: HashMap::new(),
             namespace_id: None,
             highlight_source: None,

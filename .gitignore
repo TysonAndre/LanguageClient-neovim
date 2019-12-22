@@ -5,3 +5,5 @@ __pycache__
 target
 rplugin/python3/tests
 tests/data/.vim/plugged
+.*.swp
+.*.swo

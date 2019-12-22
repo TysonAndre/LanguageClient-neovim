@@ -12,7 +12,7 @@ use std::process::{ChildStdin, ChildStdout, Stdio};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use log::{debug, error, info, log_enabled, warn};
 
@@ -64,6 +64,7 @@ fn main() -> Fallible<()> {
     let language_client = language_client::LanguageClient {
         state_mutex: Arc::new(Mutex::new(State::new(tx)?)),
         clients_mutex: Arc::new(Mutex::new(HashMap::new())),
+        diagnostics_mutex: Arc::new(Mutex::new(())),
     };
 
     language_client.loop_call(&rx)

@@ -10,6 +10,7 @@ use failure::err_msg;
 use itertools::Itertools;
 use notify::Watcher;
 use std::sync::mpsc;
+use std::time::Instant;
 use vim::try_get;
 
 impl LanguageClient {
@@ -28,6 +29,7 @@ impl LanguageClient {
             let language_client = LanguageClient {
                 state_mutex: self.state_mutex.clone(),
                 clients_mutex: self.clients_mutex.clone(), // not sure if useful to clone this
+                diagnostics_mutex: self.diagnostics_mutex.clone(), // not sure if useful to clone this
             };
             thread::spawn(move || {
                 if let Err(err) = language_client.handle_call(call) {
@@ -1897,6 +1899,7 @@ impl LanguageClient {
     }
 
     pub fn textDocument_publishDiagnostics(&self, params: &Value) -> Fallible<()> {
+        let received_time = Instant::now();
         info!("Begin {}", lsp::notification::PublishDiagnostics::METHOD);
         let params: PublishDiagnosticsParams = params.clone().to_lsp()?;
         if !self.get(|state| state.diagnosticsEnable)? {
@@ -1920,13 +1923,57 @@ impl LanguageClient {
             })
             .map(Clone::clone)
             .collect::<Vec<_>>();
+        let isUpToDate = self.update(|state| {
+            let last_update_time_option = state.file_diagnostics_updated.get(&filename);
+            if let Some(last_update_time) = last_update_time_option {
+                info!("Saw previous update {}", filename);
+                if *last_update_time > received_time {
+                    info!("Skipping outdated event {}", filename);
+                    return Ok(false);
+                }
+            }
 
+            Ok(true)
+        })?;
+        if !isUpToDate {
+            info!(
+                "End early before lock acquired {}",
+                lsp::notification::PublishDiagnostics::METHOD
+            );
+            return Ok(());
+        }
+
+        let _raii_lock = self.lock_diagnostics_update();
+        let didChange = self.update(|state| {
+            let last_update_time_option = state.file_diagnostics_updated.get(&filename);
+            if let Some(last_update_time) = last_update_time_option {
+                if *last_update_time > received_time {
+                    info!(
+                        "Skipping outdated event after acquiring _raii_lock {}",
+                        filename
+                    );
+                    return Ok(true);
+                }
+            }
+            state
+                .file_diagnostics_updated
+                .insert(filename.clone(), received_time);
+            return Ok(false);
+        })?;
+        if didChange {
+            info!(
+                "End early after acquiring lock {}",
+                lsp::notification::PublishDiagnostics::METHOD
+            );
+            return Ok(());
+        }
         self.update(|state| {
             state
                 .diagnostics
                 .insert(filename.clone(), diagnostics.clone());
             Ok(())
         })?;
+
         self.update_quickfixlist()?;
 
         let current_filename: String = self.vim()?.get_filename(&Value::Null)?;
@@ -1947,6 +1994,23 @@ impl LanguageClient {
             )
         });
 
+        let isUpToDate = self.update(|state| {
+            let last_update_time_option = state.file_diagnostics_updated.get(&filename);
+            if let Some(last_update_time) = last_update_time_option {
+                if *last_update_time > received_time {
+                    info!("Skipping outdated event second check {}", filename);
+                    return Ok(false);
+                }
+            }
+            return Ok(true);
+        })?;
+        if !isUpToDate {
+            info!(
+                "End early 2 {}",
+                lsp::notification::PublishDiagnostics::METHOD
+            );
+            return Ok(());
+        }
         self.process_diagnostics(&current_filename, &diagnostics)?;
         self.update(|state| {
             state.viewports.remove(&filename);
@@ -2382,7 +2446,7 @@ impl LanguageClient {
         let viewport = self.vim()?.get_viewport(params)?;
 
         // use the most severe diagnostic of each line as the sign
-        let signs_next: Vec<_> = self.update(|state| {
+        let mut signs_next: Vec<_> = self.update(|state| {
             let limit = if let Some(n) = state.diagnosticsSignsMax {
                 n as usize
             } else {
@@ -2430,7 +2494,7 @@ impl LanguageClient {
                 _ => {}
             }
         }
-        for sign in &mut signs_to_add {
+        for sign in &mut signs_next {
             if sign.id == 0 {
                 sign.id = self.update(|state| {
                     state.sign_next_id += 1;
@@ -2439,7 +2503,7 @@ impl LanguageClient {
             }
         }
         self.vim()?
-            .set_signs(&filename, &signs_to_add, &signs_to_delete)?;
+            .set_signs(&filename, &signs_next, &signs_to_delete)?;
         self.update(|state| {
             let signs = state.signs.entry(filename.clone()).or_default();
             // signs might be deleted AND added in the same line to change severity,
