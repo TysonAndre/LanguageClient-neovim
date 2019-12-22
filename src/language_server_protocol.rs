@@ -1994,6 +1994,7 @@ impl LanguageClient {
             )
         });
 
+        /*
         let isUpToDate = self.update(|state| {
             let last_update_time_option = state.file_diagnostics_updated.get(&filename);
             if let Some(last_update_time) = last_update_time_option {
@@ -2011,11 +2012,8 @@ impl LanguageClient {
             );
             return Ok(());
         }
+        */
         self.process_diagnostics(&current_filename, &diagnostics)?;
-        self.update(|state| {
-            state.viewports.remove(&filename);
-            Ok(())
-        })?;
         self.languageClient_handleCursorMoved(&Value::Null)?;
         self.vim()?
             .rpcclient
