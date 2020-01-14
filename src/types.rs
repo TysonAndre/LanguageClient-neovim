@@ -33,6 +33,7 @@ pub const REQUEST__NCM2OnComplete: &str = "LanguageClient_NCM2OnComplete";
 pub const REQUEST__ExplainErrorAtPoint: &str = "languageClient/explainErrorAtPoint";
 pub const REQUEST__FindLocations: &str = "languageClient/findLocations";
 pub const REQUEST__DebugInfo: &str = "languageClient/debugInfo";
+pub const REQUEST__CodeLensAction: &str = "LanguageClient/handleCodeLensAction";
 pub const NOTIFICATION__HandleBufNewFile: &str = "languageClient/handleBufNewFile";
 pub const NOTIFICATION__HandleFileType: &str = "languageClient/handleFileType";
 pub const NOTIFICATION__HandleTextChanged: &str = "languageClient/handleTextChanged";
@@ -95,6 +96,14 @@ pub struct HighlightSource {
     pub source: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum UseVirtualText {
+    Diagnostics,
+    CodeLens,
+    All,
+    No,
+}
+
 #[derive(Serialize)]
 pub struct State {
     // Program state.
@@ -114,6 +123,8 @@ pub struct State {
     pub text_documents_metadata: HashMap<String, TextDocumentItemMetadata>,
     // filename => diagnostics.
     pub diagnostics: HashMap<String, Vec<Diagnostic>>,
+    // filename => codeLens.
+    pub code_lens: HashMap<String, Vec<CodeLens>>,
     #[serde(skip_serializing)]
     pub line_diagnostics: HashMap<(String, u64), String>,
     #[serde(skip_serializing)]
@@ -159,7 +170,7 @@ pub struct State {
     pub wait_output_timeout: Duration,
     pub hoverPreview: HoverPreviewOption,
     pub completionPreferTextEdit: bool,
-    pub use_virtual_text: bool,
+    pub use_virtual_text: UseVirtualText,
     pub echo_project_root: bool,
 
     pub loggingFile: Option<String>,
@@ -196,6 +207,7 @@ impl State {
             roots: HashMap::new(),
             text_documents: HashMap::new(),
             text_documents_metadata: HashMap::new(),
+            code_lens: HashMap::new(),
             diagnostics: HashMap::new(),
             line_diagnostics: HashMap::new(),
             sign_next_id: 75_000,
@@ -235,7 +247,7 @@ impl State {
             wait_output_timeout: Duration::from_secs(10),
             hoverPreview: HoverPreviewOption::default(),
             completionPreferTextEdit: false,
-            use_virtual_text: true,
+            use_virtual_text: UseVirtualText::All,
             echo_project_root: true,
             loggingFile: None,
             loggingLevel: log::LevelFilter::Warn,
